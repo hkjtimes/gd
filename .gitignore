@@ -1,0 +1,46 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+/build/
+/dist/
+.eggs/
+# ВАЖНО: шаблоны виртуальных окружений якорим слэшем в начале,
+# иначе "env/" исключит пакет gdai/env/ — ядро проекта.
+/.venv/
+/venv/
+/env/
+
+# --- инструменты ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# --- результаты прогонов (веса и метрики не версионируем) ---
+runs/
+*.pt
+*.pth
+*.ckpt
+metrics.jsonl
+
+# --- медиа-выхлоп демонстраций ---
+*.mp4
+*.gif
+curves.png
+demo/
+frames/
+
+# ВАЖНО: levels/*.json — это данные проекта, они версионируются.
+!levels/*.json
+
+# --- временные файлы атомарной записи ---
+.*.tmp*
+
+# --- ОС и редакторы ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
