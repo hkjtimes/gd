@@ -58,6 +58,7 @@ PARALLAX_SHAPES: tuple[str, ...] = (
 )
 DECOR_STYLES: tuple[str, ...] = (
     "bars", "pipes", "gears", "glyphs", "floaters", "mixed",
+    "lattice", "waves", "crystals",
 )
 
 # Названия полей-цветов: используются в __post_init__ и в монохром/инверсии.
@@ -219,6 +220,11 @@ class Theme:
     ground_style: str = "flat"   # см. GROUND_STYLES
     parallax_shape: str = "blocks"  # см. PARALLAX_SHAPES
     decor_style: str = "mixed"      # см. DECOR_STYLES
+    # Сколько неигрового мусора живёт в кадре и насколько он заметен. Две ручки,
+    # а не одна: «много бледного тумана» и «три ярких трубы» — принципиально
+    # разные задачи для зрения, и обе обязаны встречаться в датасете.
+    decor_density: float = 0.5   # 0..1 плотность декораций
+    decor_contrast: float = 0.5  # 0..1 насколько декор выделяется на фоне
     bloom: float = 0.35          # 0..1 сила пост-свечения
     vignette: float = 0.3        # 0..1 затемнение по краям
     noise: float = 0.05          # 0..1 зернистость кадра
@@ -226,8 +232,9 @@ class Theme:
     gamma: float = 1.0           # 0.4..2.5, 1.0 — без изменений
     chromatic: float = 0.0       # 0..1 хроматическая аберрация
     trail: float = 0.5           # 0..1 длина следа за игроком
-    # Тряска камеры в пикселях. По умолчанию 0: кадр обязан совпадать с
-    # разметкой пиксель-в-пиксель, а сдвинуть можно только оба массива сразу.
+    # Тряска камеры в пикселях, 0..1 (SPEC §9: не более пикселя). По умолчанию
+    # 0: кадр обязан совпадать с разметкой пиксель-в-пиксель, а сдвинуть можно
+    # только оба массива сразу — это решение вызывающего, не темы.
     shake: float = 0.0
     pattern_scale: float = 1.0   # 0.25..4, масштаб фонового узора
     monochrome: bool = False     # палитра обесцвечена
@@ -252,9 +259,11 @@ class Theme:
         self.noise = _clamp01(self.noise)
         self.trail = _clamp01(self.trail)
         self.chromatic = _clamp01(self.chromatic)
+        self.decor_density = _clamp01(self.decor_density)
+        self.decor_contrast = _clamp01(self.decor_contrast)
         self.contrast = _clamp(self.contrast, 0.3, 2.5)
         self.gamma = _clamp(self.gamma, 0.4, 2.5)
-        self.shake = _clamp(self.shake, 0.0, 2.0)
+        self.shake = _clamp(self.shake, 0.0, 1.0)
         self.pattern_scale = _clamp(self.pattern_scale, 0.25, 4.0)
 
         self.parallax_layers = int(_clamp(self.parallax_layers, 0, 3))
@@ -358,6 +367,7 @@ BUILTIN_THEMES: tuple[Theme, ...] = (
         decor_colors=((26, 20, 74), (62, 40, 134), (0, 168, 182)),
         outline_width=1, corner_radius=0, ground_style="grid",
         parallax_shape="bars", decor_style="mixed",
+        decor_density=0.85, decor_contrast=0.8,
         bloom=0.9, vignette=0.45, noise=0.04, contrast=1.15, gamma=0.95,
         chromatic=0.25, trail=0.9, pattern_scale=1.0, seed=101,
     ),
@@ -375,6 +385,7 @@ BUILTIN_THEMES: tuple[Theme, ...] = (
         decor_colors=((60, 88, 124), (86, 118, 156), (120, 84, 44)),
         outline_width=1, corner_radius=0, ground_style="dotted",
         parallax_shape="mountains", decor_style="glyphs",
+        decor_density=0.5, decor_contrast=0.45,
         bloom=0.05, vignette=0.15, noise=0.10, contrast=1.05, gamma=1.0,
         chromatic=0.0, trail=0.15, pattern_scale=2.0, seed=202,
     ),
@@ -392,6 +403,7 @@ BUILTIN_THEMES: tuple[Theme, ...] = (
         decor_colors=((170, 170, 170), (210, 210, 210), (140, 140, 140)),
         outline_width=2, corner_radius=0, ground_style="stripes",
         parallax_shape="triangles", decor_style="bars",
+        decor_density=0.55, decor_contrast=0.7,
         bloom=0.0, vignette=0.25, noise=0.06, contrast=1.25, gamma=1.0,
         chromatic=0.0, trail=0.3, pattern_scale=1.5,
         monochrome=True, seed=303,
@@ -410,6 +422,7 @@ BUILTIN_THEMES: tuple[Theme, ...] = (
         decor_colors=((240, 214, 234), (206, 232, 240), (250, 236, 208)),
         outline_width=1, corner_radius=3, ground_style="gradient",
         parallax_shape="circles", decor_style="floaters",
+        decor_density=0.7, decor_contrast=0.35,
         bloom=0.3, vignette=0.12, noise=0.03, contrast=0.92, gamma=1.05,
         chromatic=0.05, trail=0.5, pattern_scale=1.2, seed=404,
     ),
@@ -427,6 +440,7 @@ BUILTIN_THEMES: tuple[Theme, ...] = (
         decor_colors=((110, 26, 8), (176, 54, 12), (60, 12, 6)),
         outline_width=1, corner_radius=1, ground_style="gradient",
         parallax_shape="mountains", decor_style="pipes",
+        decor_density=0.75, decor_contrast=0.65,
         bloom=0.8, vignette=0.5, noise=0.08, contrast=1.2, gamma=0.9,
         chromatic=0.15, trail=0.8, pattern_scale=0.8, seed=505,
     ),
@@ -443,7 +457,8 @@ BUILTIN_THEMES: tuple[Theme, ...] = (
         portal_fill=(110, 160, 255), goal_fill=(255, 255, 240),
         decor_colors=((40, 30, 96), (70, 54, 150), (18, 14, 52)),
         outline_width=1, corner_radius=2, ground_style="flat",
-        parallax_shape="circles", decor_style="mixed",
+        parallax_shape="circles", decor_style="crystals",
+        decor_density=0.6, decor_contrast=0.5,
         bloom=0.7, vignette=0.55, noise=0.05, contrast=1.05, gamma=1.0,
         chromatic=0.1, trail=0.7, pattern_scale=1.0, seed=606,
     ),
@@ -460,7 +475,8 @@ BUILTIN_THEMES: tuple[Theme, ...] = (
         portal_fill=(180, 60, 255), goal_fill=(255, 255, 255),
         decor_colors=((60, 8, 92), (0, 130, 140), (120, 16, 90)),
         outline_width=2, corner_radius=0, ground_style="grid",
-        parallax_shape="bars", decor_style="pipes",
+        parallax_shape="bars", decor_style="lattice",
+        decor_density=0.95, decor_contrast=0.9,
         bloom=1.0, vignette=0.5, noise=0.07, contrast=1.3, gamma=0.88,
         chromatic=0.45, trail=0.95, pattern_scale=1.0, seed=707,
     ),
@@ -477,7 +493,8 @@ BUILTIN_THEMES: tuple[Theme, ...] = (
         portal_fill=(160, 200, 255), goal_fill=(255, 255, 255),
         decor_colors=((30, 70, 150), (46, 92, 176), (18, 50, 120)),
         outline_width=1, corner_radius=0, ground_style="grid",
-        parallax_shape="blocks", decor_style="glyphs",
+        parallax_shape="blocks", decor_style="lattice",
+        decor_density=0.8, decor_contrast=0.6,
         bloom=0.1, vignette=0.2, noise=0.04, contrast=1.1, gamma=1.0,
         chromatic=0.0, trail=0.2, pattern_scale=0.5, seed=808,
     ),
@@ -495,6 +512,7 @@ BUILTIN_THEMES: tuple[Theme, ...] = (
         decor_colors=((226, 226, 230), (240, 240, 244), (214, 214, 220)),
         outline_width=0, corner_radius=2, ground_style="flat",
         parallax_shape="blocks", decor_style="bars",
+        decor_density=0.0, decor_contrast=0.2,
         bloom=0.0, vignette=0.0, noise=0.0, contrast=1.0, gamma=1.0,
         chromatic=0.0, trail=0.0, pattern_scale=1.0, seed=909,
     ),
@@ -512,6 +530,7 @@ BUILTIN_THEMES: tuple[Theme, ...] = (
         decor_colors=((26, 78, 46), (44, 108, 62), (14, 48, 30)),
         outline_width=1, corner_radius=1, ground_style="dotted",
         parallax_shape="triangles", decor_style="floaters",
+        decor_density=0.9, decor_contrast=0.4,
         bloom=0.2, vignette=0.4, noise=0.09, contrast=1.05, gamma=1.05,
         chromatic=0.05, trail=0.35, pattern_scale=1.6, seed=1010,
     ),
@@ -528,7 +547,8 @@ BUILTIN_THEMES: tuple[Theme, ...] = (
         portal_fill=(140, 170, 220), goal_fill=(255, 255, 255),
         decor_colors=((186, 216, 236), (216, 236, 248), (160, 194, 218)),
         outline_width=1, corner_radius=4, ground_style="gradient",
-        parallax_shape="circles", decor_style="floaters",
+        parallax_shape="circles", decor_style="crystals",
+        decor_density=0.65, decor_contrast=0.3,
         bloom=0.5, vignette=0.18, noise=0.02, contrast=0.95, gamma=1.1,
         chromatic=0.12, trail=0.45, pattern_scale=1.4, seed=1111,
     ),
@@ -546,6 +566,7 @@ BUILTIN_THEMES: tuple[Theme, ...] = (
         decor_colors=((48, 0, 48), (0, 70, 60), (90, 90, 96)),
         outline_width=2, corner_radius=0, ground_style="stripes",
         parallax_shape="blocks", decor_style="glyphs",
+        decor_density=1.0, decor_contrast=1.0,
         bloom=0.6, vignette=0.35, noise=0.35, contrast=1.45, gamma=0.85,
         chromatic=0.95, trail=0.85, pattern_scale=0.6, seed=1212,
     ),
@@ -562,7 +583,8 @@ BUILTIN_THEMES: tuple[Theme, ...] = (
         portal_fill=(150, 110, 220), goal_fill=(255, 250, 230),
         decor_colors=((120, 60, 110), (196, 110, 110), (70, 30, 80)),
         outline_width=1, corner_radius=1, ground_style="flat",
-        parallax_shape="mountains", decor_style="bars",
+        parallax_shape="mountains", decor_style="waves",
+        decor_density=0.6, decor_contrast=0.55,
         bloom=0.5, vignette=0.42, noise=0.03, contrast=1.08, gamma=1.0,
         chromatic=0.08, trail=0.4, pattern_scale=1.0, seed=1313,
     ),
@@ -579,7 +601,8 @@ BUILTIN_THEMES: tuple[Theme, ...] = (
         portal_fill=(110, 150, 220), goal_fill=(255, 255, 255),
         decor_colors=((198, 228, 246), (226, 244, 254), (172, 208, 234)),
         outline_width=1, corner_radius=2, ground_style="grid",
-        parallax_shape="triangles", decor_style="mixed",
+        parallax_shape="triangles", decor_style="waves",
+        decor_density=0.7, decor_contrast=0.45,
         bloom=0.45, vignette=0.2, noise=0.03, contrast=1.0, gamma=1.08,
         chromatic=0.06, trail=0.55, pattern_scale=1.3, seed=1414,
     ),
@@ -733,15 +756,32 @@ def random_theme(rng: np.random.Generator, name: str | None = None) -> Theme:
     portal_fill = hsv_rgb(h_accent + float(rng.uniform(0.2, 0.4)), float(rng.uniform(0.35, 1.0)), float(rng.uniform(0.5, 1.0)))
     goal_fill = hsv_rgb(float(rng.random()), float(rng.uniform(0.0, 0.5)), float(rng.uniform(0.7, 1.0)))
 
-    n_decor = int(rng.integers(2, 5))
-    decor_colors = tuple(
-        mix_rgb(
-            bg_bottom,
-            hsv_rgb(h_bg + float(rng.uniform(-0.25, 0.25)), float(rng.uniform(0.0, 0.9)), float(rng.uniform(0.1, 0.95))),
-            float(rng.uniform(0.15, 0.75)),
+    # Палитра декора. Три стратегии вместо одной: раньше декор ВСЕГДА уводился к
+    # цвету фона, и «декорация = бледное пятно» становилось надёжным признаком —
+    # ровно тем, на который сеть не должна опираться. Теперь декор бывает и
+    # бледным, и кричаще ярким, и покрашенным как настоящий блок.
+    decor_contrast = float(rng.random())
+    n_decor = int(rng.integers(3, 7))
+    decor_list: list[RGB] = []
+    for _ in range(n_decor):
+        pick = float(rng.random())
+        tint = hsv_rgb(
+            h_bg + float(rng.uniform(-0.35, 0.35)),
+            float(rng.uniform(0.0, 1.0)),
+            float(rng.uniform(0.05, 1.0)),
         )
-        for _ in range(n_decor)
-    )
+        if pick < 0.45:
+            # «Туман»: чуть темнее или светлее фона, еле различим.
+            t = float(rng.uniform(0.12, 0.45)) * (0.5 + decor_contrast)
+            decor_list.append(mix_rgb(bg_bottom, tint, min(1.0, t)))
+        elif pick < 0.78:
+            # «Конструкции»: заметные, но своего цвета.
+            t = float(rng.uniform(0.5, 1.0))
+            decor_list.append(mix_rgb(bg_bottom, tint, t))
+        else:
+            # Самый вредный вариант: декор покрашен как игровой блок.
+            decor_list.append(mix_rgb(block_fill, tint, float(rng.uniform(0.0, 0.45))))
+    decor_colors = tuple(decor_list)
 
     theme = Theme(
         name=theme_name,
@@ -765,6 +805,8 @@ def random_theme(rng: np.random.Generator, name: str | None = None) -> Theme:
         ground_style=str(rng.choice(GROUND_STYLES)),
         parallax_shape=str(rng.choice(PARALLAX_SHAPES)),
         decor_style=str(rng.choice(DECOR_STYLES)),
+        decor_density=float(rng.random()),
+        decor_contrast=decor_contrast,
         bloom=float(rng.random()),
         vignette=float(rng.uniform(0.0, 0.7)),
         noise=float(rng.uniform(0.0, 0.35)),

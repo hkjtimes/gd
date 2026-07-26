@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "name": "gravity_lab",
+  "length": 132.0,
+  "start_mode": "cube",
+  "start_speed_index": 1,
+  "start_gravity": 1,
+  "ceiling_y": 12.0,
+  "theme_hint": "neon",
+  "checkpoints": [
+    25.0,
+    47.5,
+    75.0,
+    100.0,
+    125.0
+  ],
+  "objects": [
+    {
+      "type": "spike",
+      "x": 14.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 20.0,
+      "y": 0.5
+    },
+    {
+      "type": "portal_gravity_up",
+      "x": 26.0,
+      "y": 1.25
+    },
+    {
+      "type": "portal_gravity_up",
+      "x": 26.0,
+      "y": 3.75
+    },
+    {
+      "type": "spike_down",
+      "x": 44.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 50.0,
+      "y": 11.5
+    },
+    {
+      "type": "spike_down",
+      "x": 56.0,
+      "y": 11.5
+    },
+    {
+      "type": "spike_down",
+      "x": 57.0,
+      "y": 11.5
+    },
+    {
+      "type": "portal_gravity_down",
+      "x": 66.0,
+      "y": 10.75
+    },
+    {
+      "type": "portal_gravity_down",
+      "x": 66.0,
+      "y": 8.25
+    },
+    {
+      "type": "spike",
+      "x": 80.0,
+      "y": 0.5
+    },
+    {
+      "type": "portal_speed_2",
+      "x": 90.0,
+      "y": 1.25
+    },
+    {
+      "type": "portal_speed_2",
+      "x": 90.0,
+      "y": 3.75
+    },
+    {
+      "type": "spike",
+      "x": 104.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 111.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 118.0,
+      "y": 0.5
+    },
+    {
+      "type": "goal",
+      "x": 132.0,
+      "y": 6.0
+    }
+  ]
+}

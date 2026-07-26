@@ -55,7 +55,6 @@ from gdai.config import EnvConfig
 from gdai.constants import (
     ACTION_HOLD,
     ACTION_NONE,
-    GROUND_Y,
     MAX_FALL_V,
     NUM_ACTIONS,
     NUM_CLASSES,
@@ -63,13 +62,11 @@ from gdai.constants import (
     OBS_W,
     SPEEDS,
 )
-from gdai.env.generator import generate_level, make_checkpoints
+from gdai.env.generator import generate_level, make_checkpoints, state_at
 from gdai.env.level import Level
 from gdai.env.physics import (
-    WAVE_START_HEIGHT,
     PlayerState,
     make_initial_state,
-    player_half_extent,
     step_physics,
 )
 from gdai.env.semantic import render_semantic
@@ -99,6 +96,11 @@ REWARD_PROGRESS_SCALE: float = 10.0
 # Дальше этого расстояния из снимка берутся только режим/гравитация/скорость,
 # а игрок ставится на пол в нужной точке.
 SNAPSHOT_X_TOLERANCE: float = 1.0
+
+# Сколько уровней помнит кэш посчитанных чекпойнтов. Пула (8) с запасом хватает:
+# кэш существует, чтобы не считать одно и то же на каждом reset, а не чтобы
+# хранить историю.
+_CP_CACHE_MAX: int = 16
 
 
 def _clamp01(value: float) -> float:
@@ -165,6 +167,8 @@ class GeometryDashEnv:
         if self.config.level_path:
             self._fixed_level = Level.load(self.config.level_path)
         self._pinned_level: Level | None = None
+        # id(level) -> (сам уровень, посчитанные чекпойнты); см. _computed_checkpoints.
+        self._cp_cache: dict[int, tuple[Level, list[float]]] = {}
         self._pool: list[Level] = []
         self._pool_dirty: bool = False
         self._generated: int = 0
@@ -192,13 +196,19 @@ class GeometryDashEnv:
         Зачем врозь: иначе включение `semantic_noise` меняло бы уровни, а смена
         темы — траекторию обучения, и воспроизводимость превратилась бы в
         фикцию.
+
+        `seed is None` означает «мне всё равно», и тогда случайны ВСЕ три потока.
+        Выводить шум и темы из `seed_from(None)` было бы хуже, чем бесполезно:
+        уровни у безымянных сред получались бы разные, а порча карты и
+        последовательность тем — одинаковые во всех средах и во всех запусках,
+        то есть ровно та корреляция, ради устранения которой потоки и разведены.
         """
         self._rng: np.random.Generator = make_rng(seed)
         self._noise_rng: np.random.Generator = make_rng(
-            seed_from("gd_env.noise", seed)
+            None if seed is None else seed_from("gd_env.noise", seed)
         )
         self._theme_rng: np.random.Generator = make_rng(
-            seed_from("gd_env.theme", seed)
+            None if seed is None else seed_from("gd_env.theme", seed)
         )
 
     # -- публичные свойства -------------------------------------------------
@@ -413,14 +423,18 @@ class GeometryDashEnv:
 
         Уровни не перегенерируются немедленно: текущий эпизод доигрывается на
         старом уровне, а пул очищается — новые уровни появятся на следующем
-        `reset`. Если уровень задан файлом или закреплён явно, сложность влияет
-        только на отчётность в `info`.
+        `reset`. Закрепление уровня, переданного в `reset(level=...)`, при этом
+        снимается: учебный план поднял сложность именно затем, чтобы играть
+        другие уровни, и молча остаться на старом значило бы тихо сломать
+        обучение. Уровень из `level_path` — осознанный выбор пользователя и
+        остаётся на месте, сложность для него влияет только на `info`.
         """
         new_d = _clamp01(d)
         if new_d == self._difficulty:
             return
         self._difficulty = new_d
         self._pool_dirty = True
+        self._pinned_level = None
 
     def close(self) -> None:
         """Освободить рендерер (pygame-поверхности) — повторный вызов безопасен."""
@@ -476,10 +490,32 @@ class GeometryDashEnv:
         if not checkpoints and self.config.practice_checkpoints:
             # Уровень из файла может не иметь чекпойнтов — считаем их сами и
             # держим у себя, чтобы не мутировать чужой объект уровня.
-            checkpoints = make_checkpoints(level)
+            checkpoints = self._computed_checkpoints(level)
         checkpoints.sort()
         self._checkpoints = checkpoints
         self._forget_practice()
+
+    def _computed_checkpoints(self, level: Level) -> list[float]:
+        """Чекпойнты, посчитанные средой, с кэшем по конкретному объекту уровня.
+
+        Зачем кэш: `make_checkpoints` проверяет каждого кандидата поиском по
+        кадрам (сотни миллисекунд), а уровни в пуле тасуются на каждом эпизоде.
+        Без кэша пустой список — а он законен, если на уровне нет ни одной точки,
+        с которой можно доиграть до конца, — пересчитывался бы при каждом
+        `reset`, и генератор снова стал бы узким местом обучения.
+
+        Ключ — `id`, поэтому кэш держит сам уровень: пока он в словаре, его
+        адрес не может достаться другому объекту. Словарь маленький и целиком
+        сбрасывается при переполнении — это кэш, а не хранилище.
+        """
+        cached = self._cp_cache.get(id(level))
+        if cached is not None and cached[0] is level:
+            return list(cached[1])
+        checkpoints = make_checkpoints(level)
+        if len(self._cp_cache) >= _CP_CACHE_MAX:
+            self._cp_cache.clear()
+        self._cp_cache[id(level)] = (level, list(checkpoints))
+        return checkpoints
 
     def _forget_practice(self) -> None:
         """Сбросить снимки и курсоры практики (уровень сменился или новый seed)."""
@@ -518,7 +554,10 @@ class GeometryDashEnv:
             if snap.x <= start_x + SNAPSHOT_X_TOLERANCE and snap.x > best_x:
                 best_idx, best_x = idx, snap.x
         if best_idx is None:
-            return make_initial_state(level, start_x)
+            # Снимков нет (первый эпизод, уровень из файла): режим, гравитацию и
+            # скорость восстанавливаем по порталам, оставшимся позади. Иначе
+            # старт в середине секции корабля означал бы мгновенную смерть куба.
+            return state_at(level, start_x)
         snap = self._snapshots[best_idx]
         if abs(snap.x - start_x) <= SNAPSHOT_X_TOLERANCE:
             return replace(snap, alive=True, finished=False, hold_prev=False)
@@ -532,24 +571,12 @@ class GeometryDashEnv:
     ) -> PlayerState:
         """Игрок стоит на «своём» полу в точке x с заданными режимом и гравитацией.
 
-        Повторяет логику `make_initial_state`, но без привязки к стартовым
-        настройкам уровня: после порталов режим и гравитация уже другие, и
-        ставить игрока «как на старте» значило бы уронить его в потолок.
+        Зачем отдельно от `state_at`: здесь режим и гравитация известны точно —
+        они взяты из снимка реального прохождения, а не восстановлены по
+        расстановке порталов.
         """
-        _, half_y = player_half_extent(mode)
-        floor_y = GROUND_Y if gravity > 0 else float(level.ceiling_y)
-        offset = WAVE_START_HEIGHT if mode == "wave" else half_y
-        return PlayerState(
-            x=float(x),
-            y=floor_y + offset * gravity,
-            vy=0.0,
-            mode=mode,
-            gravity=gravity,
-            speed_index=speed_index,
-            on_ground=(mode != "wave"),
-            alive=True,
-            finished=False,
-            hold_prev=False,
+        return make_initial_state(
+            level, x, mode=mode, gravity=gravity, speed_index=speed_index
         )
 
     # -- наблюдения ---------------------------------------------------------
@@ -653,7 +680,11 @@ class GeometryDashEnv:
             width=OBS_W,
             height=OBS_H,
             decoration_level=float(self.config.decoration_level),
-            seed=seed_from("gd_env.renderer", self._seed),
+            seed=(
+                None
+                if self._seed is None
+                else seed_from("gd_env.renderer", self._seed)
+            ),
         )
         if self.config.randomize_theme:
             self._randomize_theme()

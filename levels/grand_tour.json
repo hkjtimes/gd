@@ -1,0 +1,336 @@
+{
+  "version": 1,
+  "name": "grand_tour",
+  "length": 193.0,
+  "start_mode": "cube",
+  "start_speed_index": 1,
+  "start_gravity": 1,
+  "ceiling_y": 12.0,
+  "theme_hint": "lava",
+  "checkpoints": [
+    25.0,
+    49.5,
+    75.5,
+    100.0,
+    125.0,
+    150.0,
+    173.5
+  ],
+  "objects": [
+    {
+      "type": "spike",
+      "x": 14.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 15.0,
+      "y": 0.5
+    },
+    {
+      "type": "pad_yellow",
+      "x": 26.0,
+      "y": 0.25
+    },
+    {
+      "type": "spike",
+      "x": 30.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 31.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 32.0,
+      "y": 0.5
+    },
+    {
+      "type": "portal_ship",
+      "x": 44.0,
+      "y": 1.25
+    },
+    {
+      "type": "portal_ship",
+      "x": 44.0,
+      "y": 3.75
+    },
+    {
+      "type": "block",
+      "x": 52.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 52.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 52.0,
+      "y": 10.5
+    },
+    {
+      "type": "block",
+      "x": 52.0,
+      "y": 9.5
+    },
+    {
+      "type": "block",
+      "x": 52.0,
+      "y": 8.5
+    },
+    {
+      "type": "block",
+      "x": 59.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 59.0,
+      "y": 1.5
+    },
+    {
+      "type": "block",
+      "x": 59.0,
+      "y": 2.5
+    },
+    {
+      "type": "block",
+      "x": 59.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 59.0,
+      "y": 10.5
+    },
+    {
+      "type": "block",
+      "x": 59.0,
+      "y": 9.5
+    },
+    {
+      "type": "block",
+      "x": 66.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 66.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 66.0,
+      "y": 10.5
+    },
+    {
+      "type": "block",
+      "x": 66.0,
+      "y": 9.5
+    },
+    {
+      "type": "block",
+      "x": 66.0,
+      "y": 8.5
+    },
+    {
+      "type": "block",
+      "x": 73.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 73.0,
+      "y": 1.5
+    },
+    {
+      "type": "block",
+      "x": 73.0,
+      "y": 2.5
+    },
+    {
+      "type": "block",
+      "x": 73.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 73.0,
+      "y": 10.5
+    },
+    {
+      "type": "portal_cube",
+      "x": 82.0,
+      "y": 1.25
+    },
+    {
+      "type": "portal_cube",
+      "x": 82.0,
+      "y": 3.75
+    },
+    {
+      "type": "spike",
+      "x": 94.0,
+      "y": 0.5
+    },
+    {
+      "type": "orb_yellow",
+      "x": 106.0,
+      "y": 2.5
+    },
+    {
+      "type": "spike",
+      "x": 109.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 110.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 111.0,
+      "y": 0.5
+    },
+    {
+      "type": "portal_wave",
+      "x": 120.0,
+      "y": 1.25
+    },
+    {
+      "type": "portal_wave",
+      "x": 120.0,
+      "y": 3.75
+    },
+    {
+      "type": "block",
+      "x": 130.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 130.0,
+      "y": 1.5
+    },
+    {
+      "type": "block",
+      "x": 130.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 130.0,
+      "y": 10.5
+    },
+    {
+      "type": "block",
+      "x": 130.0,
+      "y": 9.5
+    },
+    {
+      "type": "block",
+      "x": 130.0,
+      "y": 8.5
+    },
+    {
+      "type": "block",
+      "x": 137.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 137.0,
+      "y": 1.5
+    },
+    {
+      "type": "block",
+      "x": 137.0,
+      "y": 2.5
+    },
+    {
+      "type": "block",
+      "x": 137.0,
+      "y": 3.5
+    },
+    {
+      "type": "block",
+      "x": 137.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 137.0,
+      "y": 10.5
+    },
+    {
+      "type": "block",
+      "x": 137.0,
+      "y": 9.5
+    },
+    {
+      "type": "block",
+      "x": 144.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 144.0,
+      "y": 1.5
+    },
+    {
+      "type": "block",
+      "x": 144.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 144.0,
+      "y": 10.5
+    },
+    {
+      "type": "block",
+      "x": 144.0,
+      "y": 9.5
+    },
+    {
+      "type": "block",
+      "x": 144.0,
+      "y": 8.5
+    },
+    {
+      "type": "portal_cube",
+      "x": 153.0,
+      "y": 1.25
+    },
+    {
+      "type": "portal_cube",
+      "x": 153.0,
+      "y": 3.75
+    },
+    {
+      "type": "spike",
+      "x": 165.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 177.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 178.0,
+      "y": 0.5
+    },
+    {
+      "type": "goal",
+      "x": 193.0,
+      "y": 6.0
+    }
+  ]
+}

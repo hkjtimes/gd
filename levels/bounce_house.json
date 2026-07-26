@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "name": "bounce_house",
+  "length": 110.0,
+  "start_mode": "cube",
+  "start_speed_index": 1,
+  "start_gravity": 1,
+  "ceiling_y": 12.0,
+  "theme_hint": "pastel",
+  "checkpoints": [
+    25.0,
+    46.5,
+    72.5,
+    100.0
+  ],
+  "objects": [
+    {
+      "type": "pad_yellow",
+      "x": 14.0,
+      "y": 0.25
+    },
+    {
+      "type": "spike",
+      "x": 18.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 19.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 20.0,
+      "y": 0.5
+    },
+    {
+      "type": "orb_yellow",
+      "x": 30.0,
+      "y": 2.5
+    },
+    {
+      "type": "spike",
+      "x": 33.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 34.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 35.0,
+      "y": 0.5
+    },
+    {
+      "type": "pad_pink",
+      "x": 46.0,
+      "y": 0.25
+    },
+    {
+      "type": "spike",
+      "x": 50.0,
+      "y": 0.5
+    },
+    {
+      "type": "orb_pink",
+      "x": 58.0,
+      "y": 2.0
+    },
+    {
+      "type": "spike",
+      "x": 61.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 62.0,
+      "y": 0.5
+    },
+    {
+      "type": "pad_red",
+      "x": 72.0,
+      "y": 0.25
+    },
+    {
+      "type": "spike",
+      "x": 76.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 77.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 78.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 79.0,
+      "y": 0.5
+    },
+    {
+      "type": "orb_red",
+      "x": 90.0,
+      "y": 3.0
+    },
+    {
+      "type": "spike",
+      "x": 94.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 95.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 96.0,
+      "y": 0.5
+    },
+    {
+      "type": "goal",
+      "x": 110.0,
+      "y": 6.0
+    }
+  ]
+}

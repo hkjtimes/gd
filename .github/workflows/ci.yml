@@ -1,0 +1,58 @@
+# CI GDAI: быстрая проверка на каждый push и pull request.
+#
+# Зачем именно так:
+#  * ubuntu + python 3.11 — та же связка, что и в разработке (проект требует 3.10+);
+#  * SDL_VIDEODRIVER=dummy — рендер pygame обязан работать без дисплея, иначе
+#    половина тестов (кадры, инвариантность к темам) не запустится на раннере;
+#  * `-m "not slow"` — тяжёлые тесты (полноразмерные уровни, расширенная
+#    проверка инвариантности, замер скорости зрения) отключены: их место в
+#    ночном прогоне, а не в цикле обратной связи разработчика;
+#  * torch ставится CPU-сборкой: GPU на раннере нет, а полный колёсный пакет
+#    с CUDA качается минутами и ничего не даёт.
+
+name: tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # Новый пуш в ту же ветку отменяет предыдущий прогон — очередь не растёт.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SDL_VIDEODRIVER: dummy
+      PYGAME_HIDE_SUPPORT_PROMPT: "1"
+      GDAI_LOG_LEVEL: ERROR
+      PYTHONHASHSEED: "0"
+
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Поставить Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Установить зависимости
+        run: |
+          python -m pip install --upgrade pip
+          # CPU-индекс torch: на раннере нет GPU, а CUDA-колесо весит гигабайты.
+          pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
+          pip install pytest
+
+      - name: Показать окружение
+        run: |
+          python -c "import sys, numpy, torch, pygame, matplotlib; print(sys.version); print('numpy', numpy.__version__); print('torch', torch.__version__); print('pygame', pygame.version.ver); print('matplotlib', matplotlib.__version__)"
+
+      - name: Тесты
+        run: pytest -q -m "not slow"

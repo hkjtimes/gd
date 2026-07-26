@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "name": "spike_garden",
+  "length": 114.0,
+  "start_mode": "cube",
+  "start_speed_index": 1,
+  "start_gravity": 1,
+  "ceiling_y": 12.0,
+  "theme_hint": "jungle",
+  "checkpoints": [
+    22.5,
+    54.0,
+    75.5,
+    98.5
+  ],
+  "objects": [
+    {
+      "type": "spike",
+      "x": 14.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 15.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 26.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 36.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 37.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 38.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 48.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 49.5,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 50.5,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 60.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 60.0,
+      "y": 1.5
+    },
+    {
+      "type": "block",
+      "x": 61.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 61.0,
+      "y": 1.5
+    },
+    {
+      "type": "spike",
+      "x": 72.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 80.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 81.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 82.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 92.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 93.5,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 102.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 103.0,
+      "y": 0.5
+    },
+    {
+      "type": "goal",
+      "x": 114.0,
+      "y": 6.0
+    }
+  ]
+}

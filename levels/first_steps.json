@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "name": "first_steps",
+  "length": 86.0,
+  "start_mode": "cube",
+  "start_speed_index": 1,
+  "start_gravity": 1,
+  "ceiling_y": 12.0,
+  "theme_hint": "minimal",
+  "checkpoints": [
+    27.5,
+    50.0
+  ],
+  "objects": [
+    {
+      "type": "spike",
+      "x": 14.0,
+      "y": 0.5
+    },
+    {
+      "type": "platform",
+      "x": 19.0,
+      "y": 3.0
+    },
+    {
+      "type": "platform",
+      "x": 20.0,
+      "y": 3.0
+    },
+    {
+      "type": "spike",
+      "x": 24.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 34.0,
+      "y": 0.5
+    },
+    {
+      "type": "platform",
+      "x": 38.0,
+      "y": 2.5
+    },
+    {
+      "type": "platform",
+      "x": 39.0,
+      "y": 2.5
+    },
+    {
+      "type": "platform",
+      "x": 40.0,
+      "y": 2.5
+    },
+    {
+      "type": "spike",
+      "x": 44.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 53.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 54.0,
+      "y": 0.5
+    },
+    {
+      "type": "platform",
+      "x": 58.0,
+      "y": 3.5
+    },
+    {
+      "type": "platform",
+      "x": 59.0,
+      "y": 3.5
+    },
+    {
+      "type": "spike",
+      "x": 64.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 69.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 74.0,
+      "y": 0.5
+    },
+    {
+      "type": "platform",
+      "x": 79.0,
+      "y": 3.0
+    },
+    {
+      "type": "platform",
+      "x": 80.0,
+      "y": 3.0
+    },
+    {
+      "type": "platform",
+      "x": 81.0,
+      "y": 3.0
+    },
+    {
+      "type": "goal",
+      "x": 86.0,
+      "y": 6.0
+    }
+  ]
+}

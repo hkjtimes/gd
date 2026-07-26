@@ -48,7 +48,7 @@ import math
 import os
 import sys
 import zlib
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 
@@ -66,9 +66,14 @@ from gdai.constants import (
     PX_PER_TILE,
     SOLID,
 )
-from gdai.env.level import Level, LevelObject, OBJECT_TYPES, type_semantic_class
+from gdai.env.level import Level, OBJECT_TYPES, type_semantic_class
 from gdai.env.physics import PlayerState, player_half_extent
-from gdai.env.semantic import SHAPE_BY_TYPE, camera_origin, class_priority
+from gdai.env.semantic import (
+    RING_INNER_RATIO,
+    SHAPE_BY_TYPE,
+    camera_origin,
+    class_priority,
+)
 from gdai.env.themes import (
     BUILTIN_THEMES,
     RGB,
@@ -128,20 +133,37 @@ _VPAD: int = 32
 # сделать декор ДЕТЕРМИНИРОВАННОЙ функцией мировых координат: объект, однажды
 # появившийся на x=42, будет там всегда, а не «плыть» вслед за камерой.
 _DECO_CELL: float = 6.0
-_DECO_MAX_PER_CELL: int = 7
+# Сколько кандидатов на ячейку хранит кэш. Реально рисуется подмножество: у
+# каждого элемента есть «ранг», и порог отбора зависит от `decoration_level` и
+# от плотности темы. Запас нужен, чтобы плотная тема могла завалить кадр мусором.
+_DECO_MAX_PER_CELL: int = 11
 
 # Виды декораций (все — неигровые). Числа, а не строки: диспетчер вызывается
 # десятки раз на кадр.
-_D_BAR, _D_PIPE, _D_GEAR, _D_GLYPH, _D_FLOATER, _D_GLOW, _D_CHEVRON, _D_PATCH = range(8)
+(
+    _D_BAR, _D_PIPE, _D_GEAR, _D_GLYPH, _D_FLOATER, _D_GLOW,
+    _D_CHEVRON, _D_PATCH, _D_LATTICE, _D_WAVE, _D_DIAMOND, _D_DASH,
+) = range(12)
+
+_D_ALL: tuple[int, ...] = tuple(range(12))
+
+# Потолок непрозрачности декора. Полностью непрозрачная декорация — это уже не
+# декорация: кольцо-шестерёнка нужного размера стала бы неотличима от игрового
+# кольца, и задача сегментации перестала бы иметь решение. Остаточная
+# прозрачность — тот самый признак «это мусор», который сеть обязана выучить.
+_DECOR_ALPHA_CAP: int = 205
 
 # Какие виды декора разрешает каждый стиль темы. Ключ — Theme.decor_style.
 _DECOR_KINDS: dict[str, tuple[int, ...]] = {
-    "bars": (_D_BAR, _D_PATCH),
-    "pipes": (_D_PIPE, _D_BAR),
-    "gears": (_D_GEAR, _D_GLOW),
-    "glyphs": (_D_GLYPH, _D_CHEVRON, _D_PATCH),
-    "floaters": (_D_FLOATER, _D_GLOW),
-    "mixed": (_D_BAR, _D_PIPE, _D_GEAR, _D_GLYPH, _D_FLOATER, _D_GLOW, _D_CHEVRON, _D_PATCH),
+    "bars": (_D_BAR, _D_PATCH, _D_DASH),
+    "pipes": (_D_PIPE, _D_BAR, _D_LATTICE),
+    "gears": (_D_GEAR, _D_GLOW, _D_LATTICE),
+    "glyphs": (_D_GLYPH, _D_CHEVRON, _D_PATCH, _D_DASH),
+    "floaters": (_D_FLOATER, _D_GLOW, _D_DIAMOND),
+    "lattice": (_D_LATTICE, _D_PATCH, _D_BAR, _D_DASH),
+    "waves": (_D_WAVE, _D_GLOW, _D_DASH, _D_CHEVRON),
+    "crystals": (_D_DIAMOND, _D_FLOATER, _D_GLOW, _D_WAVE),
+    "mixed": _D_ALL,
 }
 
 # Период «биения» яркости в кадрах (примерно 0.8 с — темп типичного трека GD).
@@ -346,6 +368,11 @@ class Renderer:
         self._theme: Theme = theme if theme is not None else BUILTIN_THEMES[0]
         self._build_rand_table()
         self.set_theme(self._theme)
+        _LOG.debug(
+            "Renderer %dx%d, тема %s, декор %.2f, SDL=%s",
+            self.width, self.height, self._theme.name, self.decoration_level,
+            os.environ.get("SDL_VIDEODRIVER", "default"),
+        )
 
     # --- свойства -----------------------------------------------------------
     @property
@@ -375,13 +402,21 @@ class Renderer:
         self._build_post()
 
     def set_decoration_level(self, level: float) -> None:
-        """Плотность декора 0..1 без пересборки кэшей.
+        """Плотность декора 0..1 без пересборки тяжёлых кэшей.
 
         Зачем отдельный метод: уровень декора крутят в интерактивном просмотре
         (клавиша D) и в учебном плане, а перестраивать ради этого фон незачем —
         декорации отбираются по «рангу», а не генерируются заново.
+
+        Пост-эффекты всё же пересчитываются: сила виньетки зависит и от темы, и
+        от уровня декора. Пока она считалась только в `set_theme`, кадр зависел
+        от ПОРЯДКА вызовов (`set_theme` до или после `set_decoration_level`) и
+        отличался до 51/255 на пиксель при одних и тех же параметрах — то есть
+        `render` переставал быть функцией своих аргументов. Пересчёт стоит
+        меньше десятка микросекунд (LUT на 256 значений и умножение маски).
         """
         self.decoration_level = float(min(max(float(level), 0.0), 1.0))
+        self._build_post()
 
     def randomize(self, rng: np.random.Generator) -> None:
         """Новая случайная тема + новая раскладка декораций.
@@ -549,11 +584,16 @@ class Renderer:
         Слои движутся медленнее камеры (коэффициенты 0.18/0.34/0.52), поэтому
         по кадру создаётся ощущение глубины — и одновременно ещё один класс
         нуисанс-сигналов, который зрение обязано игнорировать.
+
+        Уровень декора здесь НЕ учитывается намеренно: раньше слои не строились,
+        если в момент `set_theme` декор был выключен, и после включения декора
+        параллакс молча не появлялся до следующей смены темы. Отбор «рисовать
+        или нет» живёт в `_draw_parallax`, где ему и место.
         """
         self._parallax = []
         th = self._theme
         layers = th.parallax_layers
-        if layers <= 0 or self.decoration_level <= 0.0:
+        if layers <= 0:
             return
 
         W, H = self.width, self.height
@@ -656,10 +696,17 @@ class Renderer:
     # слой 1: фон
     # ------------------------------------------------------------------
     def _draw_background(self, surf: pygame.Surface, cam: tuple[float, float], t: int) -> None:
-        """Фоновый градиент с узором, медленно ползущий вслед за камерой."""
+        """Фоновый градиент с узором, медленно ползущий вслед за камерой.
+
+        Здесь же живёт «биение» фона: полупрозрачная заливка поверх градиента,
+        пульсирующая с периодом трека. В отличие от общей пульсации в
+        пост-обработке она затрагивает ТОЛЬКО фон, поэтому фон и объекты
+        «дышат» вразнобой — ещё один признак, на который сети опираться нельзя.
+        """
+        th = self._theme
         bg = self._bg
         if bg is None:  # pragma: no cover - set_theme всегда его создаёт
-            surf.fill(self._theme.bg_bottom)
+            surf.fill(th.bg_bottom)
             return
         W, H = self.width, self.height
         cam_x, cam_y = cam
@@ -669,6 +716,14 @@ class Renderer:
         dy = int(round(cam_y * _P * factor))
         dy = -_VPAD if dy < -_VPAD else (_VPAD if dy > _VPAD else dy)
         surf.blit(bg, (0, 0), area=pygame.Rect(sx, _VPAD - dy, W, H))
+
+        if th.pulse > 0.0 and self.decoration_level > 0.0:
+            k = 0.5 + 0.5 * math.sin(2.0 * math.pi * (t % _PULSE_PERIOD) / _PULSE_PERIOD)
+            alpha = int(46 * th.pulse * self.decoration_level * k)
+            if alpha > 2:
+                tint = th.ground_line if th.is_dark() else th.bg_bottom
+                self._alpha.fill(_rgba(tint, alpha))
+                surf.blit(self._alpha, (0, 0))
 
     # ------------------------------------------------------------------
     # слой 2: параллакс
@@ -708,13 +763,13 @@ class Renderer:
         for row in vals:
             items.append((
                 row[0],                                 # 0 ранг
-                int(row[1] * 8) & 7,                    # 1 вид (маппится стилем темы)
+                int(row[1] * 4093),                     # 1 вид (маппится стилем темы)
                 base_x + row[2] * _DECO_CELL,           # 2 мировой x
                 -0.5 + row[3] * 11.0,                   # 3 мировой y
                 0.25 + row[4] * 2.35,                   # 4 ширина в тайлах
                 0.25 + row[5] * 2.95,                   # 5 высота в тайлах
-                int(row[6] * 8) & 7,                    # 6 индекс цвета
-                40 + int(row[7] * 150),                 # 7 альфа
+                int(row[6] * 4093),                     # 6 индекс цвета
+                70 + int(row[7] * 170),                 # 7 базовая альфа
                 row[8],                                 # 8 свободный параметр
             ))
         result = tuple(items)
@@ -737,8 +792,14 @@ class Renderer:
         layer = self._alpha
         layer.fill((0, 0, 0, 0))
 
-        W, H = self.width, self.height
-        cam_x, cam_y = cam
+        # Порог отбора: ручка кадра (`decoration_level`) умножается на плотность
+        # ТЕМЫ. Так «пустой минимализм» и «свалка труб» — разные темы, а не
+        # разные настройки среды, и обе попадают в датасет при одном и том же
+        # decoration_level=1.
+        threshold = level_decor * (0.45 + 0.55 * th.decor_density)
+
+        W = self.width
+        cam_x, _cam_y = cam
         x0 = cam_x - 2.0
         x1 = cam_x + W / _P + 2.0
         c_start = int(math.floor(x0 / _DECO_CELL))
@@ -746,12 +807,33 @@ class Renderer:
         drawn = 0
         for cell in range(c_start, c_end + 1):
             for item in self._cell_items(cell):
-                if item[0] > level_decor:
+                if item[0] > threshold:
                     continue
                 self._draw_decor_item(layer, item, kinds, cam, t)
                 drawn += 1
         if drawn:
             surf.blit(layer, (0, 0))
+
+    def decor_count(self, cam: tuple[float, float]) -> int:
+        """Сколько неигровых декораций попадает в кадр при текущих настройках.
+
+        Зачем публично: «декораций достаточно, чтобы задача была нетривиальной» —
+        проверяемое утверждение, и мерить его надо тем же кодом, что и рисует,
+        а не повторяя формулу порога в тесте.
+        """
+        th = self._theme
+        threshold = self.decoration_level * (0.45 + 0.55 * th.decor_density)
+        if self.decoration_level <= 0.0:
+            return 0
+        cam_x, _ = cam
+        c_start = int(math.floor((cam_x - 2.0) / _DECO_CELL))
+        c_end = int(math.floor((cam_x + self.width / _P + 2.0) / _DECO_CELL))
+        return sum(
+            1
+            for cell in range(c_start, c_end + 1)
+            for item in self._cell_items(cell)
+            if item[0] <= threshold
+        )
 
     def _draw_decor_item(
         self,
@@ -768,7 +850,13 @@ class Renderer:
         _, raw_kind, wx, wy, tw, thh, ci, alpha, param = item
         kind = kinds[raw_kind % len(kinds)]
         color = th.decor_color(ci)
-        col = _rgba(color, int(alpha * (0.45 + 0.55 * self.decoration_level)))
+        # Заметность декора — тоже параметр темы. Раньше альфа была жёстко
+        # 40..190, а палитра декора всегда тянулась к фону: «декорация = бледное
+        # пятно» превращалось в надёжный признак, по которому сеть отличала бы
+        # мусор от объекта, не глядя на форму. Теперь бывает и еле видимый туман,
+        # и совершенно непрозрачная конструкция.
+        visibility = (0.4 + 0.6 * self.decoration_level) * (0.55 + 0.9 * th.decor_contrast)
+        col = _rgba(color, min(_DECOR_ALPHA_CAP, int(alpha * visibility)))
         x = _sx(wx, cam_x)
         y = _sy(wy, cam_y, H)
         w = max(1, int(tw * _P))
@@ -847,6 +935,60 @@ class Renderer:
                 )
             return
 
+        if kind == _D_LATTICE:
+            # Решётка/ферма: прямоугольник с крестовинами. Даёт много тонких
+            # линий рядом с игровыми объектами — самый неприятный фон для
+            # сегментации кромок блока.
+            rect = pygame.Rect(int(x - w / 2), int(y - h / 2), w, h)
+            pygame.draw.rect(layer, col, rect, width=1)
+            cells = max(1, int(1 + param * 3))
+            step_x = max(2, w // cells)
+            for gx in range(rect.x, rect.right, step_x):
+                pygame.draw.line(layer, col, (gx, rect.y), (min(gx + step_x, rect.right), rect.bottom - 1), 1)
+                pygame.draw.line(layer, col, (gx, rect.bottom - 1), (min(gx + step_x, rect.right), rect.y), 1)
+            return
+
+        if kind == _D_WAVE:
+            # Синусоидальная лента: единственная декорация с криволинейным
+            # контуром во всю ширину — ломает «всё прямоугольное» у сети.
+            amp = max(1.0, h * 0.4)
+            period = max(4.0, w * (0.6 + param))
+            phase = t * (0.02 + 0.04 * param)
+            pts = [
+                (int(x - w / 2 + k), int(y + amp * math.sin(2 * math.pi * (x - w / 2 + k) / period + phase)))
+                for k in range(0, w + 1, 2)
+            ]
+            if len(pts) >= 2:
+                pygame.draw.lines(layer, col, False, pts, max(1, min(3, h // 4)))
+            return
+
+        if kind == _D_DIAMOND:
+            # Ромб/кристалл: форма, которой нет ни у одного игрового объекта,
+            # но по «весу» в кадре сравнимая с блоком.
+            hw = max(1, w // 2)
+            hh = max(1, h // 2)
+            bob = math.sin((t * 0.04) + param * 6.283) * 1.5
+            cx, cy = int(x), int(y + bob)
+            pts = [(cx, cy - hh), (cx + hw, cy), (cx, cy + hh), (cx - hw, cy)]
+            pygame.draw.polygon(layer, col, pts)
+            if hw > 2 and hh > 2:
+                pygame.draw.polygon(layer, _rgba(mix_rgb(color, th.bg_top, 0.5), col[3]),
+                                    _shrink([(int(px), int(py)) for px, py in pts], 0.5))
+            return
+
+        if kind == _D_DASH:
+            # Пунктир/«бегущая строка»: короткие штрихи с зазором. Даёт кадру
+            # высокочастотный рисунок, похожий на кромку блока, но без объекта.
+            seg = max(2, int(2 + param * 4))
+            gap = max(1, seg // 2)
+            thick = max(1, h // 6)
+            gx = int(x - w / 2)
+            end = gx + w
+            while gx < end:
+                pygame.draw.rect(layer, col, pygame.Rect(gx, int(y), min(seg, end - gx), thick))
+                gx += seg + gap
+            return
+
         # _D_PATCH: пучок параллельных линий («технический» узор на стене)
         step = max(2, h // 4)
         for gy in range(int(y), int(y) + h, step):
@@ -892,7 +1034,6 @@ class Renderer:
         сплошной заливкой: «линия пола» вместо заливки означала бы, что зрение
         учится видеть SOLID там, где на картинке фон.
         """
-        th = self._theme
         W, H = self.width, self.height
         cam_x, cam_y = cam
         top = H - 0.5
@@ -991,7 +1132,15 @@ class Renderer:
         return sprite
 
     def _make_block(self, w: int, h: int) -> pygame.Surface:
-        """Спрайт блока/платформы в стиле темы (`Theme.block_style`)."""
+        """Спрайт блока/платформы в стиле темы (`Theme.block_style`).
+
+        Внутри каждого стиля есть ещё и вариации, выбираемые зерном темы:
+        направление полос и градиента, сторона фаски, шаг и размер точек,
+        глубина «пустой» заливки у обводки. Зачем: имён стилей всего семь
+        (контракт SPEC §9), и без вариаций две случайные темы с одним стилем
+        давали блок, отличающийся ровно палитрой — то есть структура блока была
+        почти константой, и сеть могла выучить именно её.
+        """
         th = self._theme
         s = pygame.Surface((w, h), pygame.SRCALPHA)
         fill = th.block_fill
@@ -999,6 +1148,8 @@ class Renderer:
         rad = min(th.corner_radius, max(0, min(w, h) // 2 - 1))
         rect = pygame.Rect(0, 0, w, h)
         style = th.block_style
+        # Биты вариации: детерминированы темой, поэтому спрайт остаётся кэшируемым.
+        var = _stable_seed(th.name, th.seed, "blockvar")
 
         if style == "gradient":
             # Градиент и скругление не совмещаем намеренно: вырезать углы из
@@ -1007,18 +1158,30 @@ class Renderer:
             rad = 0
             top = mix_rgb(fill, (255, 255, 255), 0.30)
             bot = mix_rgb(fill, (0, 0, 0), 0.35)
-            for i in range(h):
-                k = i / max(1, h - 1)
-                pygame.draw.line(s, mix_rgb(top, bot, k), (0, i), (w - 1, i))
+            if var & 1:
+                top, bot = bot, top
+            if (var >> 1) & 1:
+                # Горизонтальный градиент: тот же стиль, другой рисунок.
+                for i in range(w):
+                    k = i / max(1, w - 1)
+                    pygame.draw.line(s, mix_rgb(top, bot, k), (i, 0), (i, h - 1))
+            else:
+                for i in range(h):
+                    k = i / max(1, h - 1)
+                    pygame.draw.line(s, mix_rgb(top, bot, k), (0, i), (w - 1, i))
         elif style == "outline":
-            pygame.draw.rect(s, mix_rgb(fill, th.bg_bottom, 0.7), rect, border_radius=rad)
+            # Насколько «пустой» блок внутри: от почти залитого до полой рамки.
+            depth = 0.45 + 0.2 * ((var >> 2) & 3)
+            pygame.draw.rect(s, mix_rgb(fill, th.bg_bottom, depth), rect, border_radius=rad)
         else:
             pygame.draw.rect(s, fill, rect, border_radius=rad)
 
         if style == "bevel":
             light = mix_rgb(fill, (255, 255, 255), 0.45)
             dark = mix_rgb(fill, (0, 0, 0), 0.45)
-            b = max(1, min(w, h) // 4)
+            if (var >> 4) & 1:
+                light, dark = dark, light
+            b = max(1, min(w, h) // (3 + ((var >> 5) & 1)))
             pygame.draw.polygon(
                 s, light,
                 [(0, 0), (w, 0), (w - b, b), (b, b), (b, h - b), (0, h)],
@@ -1028,16 +1191,28 @@ class Renderer:
                 [(w, 0), (w, h), (0, h), (b, h - b), (w - b, h - b), (w - b, b)],
             )
         elif style == "striped":
-            stripe = mix_rgb(fill, edge, 0.55)
-            step = max(2, min(w, h) // 2)
-            for k in range(-h, w + h, step):
-                pygame.draw.line(s, stripe, (k, h), (k + h, 0), 1)
+            stripe = mix_rgb(fill, edge, 0.4 + 0.1 * ((var >> 6) & 3))
+            step = max(2, min(w, h) // 2 + ((var >> 8) & 1))
+            thick = 1 + ((var >> 9) & 1)
+            if (var >> 10) & 1:
+                # Полосы «в другую сторону»: диагональ меняет знак.
+                for k in range(-h, w + h, step):
+                    pygame.draw.line(s, stripe, (k, 0), (k + h, h), thick)
+            elif (var >> 11) & 1:
+                # Горизонтальные полосы.
+                for k in range(0, h, step):
+                    pygame.draw.line(s, stripe, (0, k), (w - 1, k), thick)
+            else:
+                for k in range(-h, w + h, step):
+                    pygame.draw.line(s, stripe, (k, h), (k + h, 0), thick)
         elif style == "dotted":
-            dot = mix_rgb(fill, edge, 0.6)
-            step = max(2, min(w, h) // 3)
+            dot = mix_rgb(fill, edge, 0.45 + 0.1 * ((var >> 12) & 3))
+            step = max(2, min(w, h) // (2 + ((var >> 14) & 1)))
+            size = 1 + ((var >> 15) & 1)
+            off = (var >> 16) & 1
             for yy in range(step // 2, h, step):
-                for xx in range(step // 2, w, step):
-                    s.fill(dot, pygame.Rect(xx, yy, 1, 1))
+                for xx in range(step // 2 + off * (step // 2), w, step):
+                    s.fill(dot, pygame.Rect(xx, yy, size, size))
         elif style == "noise":
             rng = np.random.default_rng(_stable_seed(th.name, th.seed, "blk", w, h))
             speck = mix_rgb(fill, edge, 0.5)
@@ -1062,28 +1237,43 @@ class Renderer:
         wdt = max(1, min(th.outline_width if th.outline_width else 1, max(1, min(w, h) // 3)))
 
         if shape == "circle":
+            # Круг рисуется ЭЛЛИПСОМ, вписанным в весь прямоугольник спрайта, а
+            # не `circle` в его середине: при чётных w/h центр `(w//2, h//2)`
+            # уезжает на полпикселя от настоящего центра хитбокса, и пила
+            # оказывалась сдвинутой вниз-вправо относительно карты (IoU 0.66).
+            # Карта строит ту же фигуру вписанной в тот же bbox — совпадение
+            # становится точным.
+            rect_full = pygame.Rect(0, 0, w, h)
             r = max(1, min(w, h) // 2)
-            c = (w // 2, h // 2)
+            c = ((w - 1) / 2.0, (h - 1) / 2.0)
             if style == "outline":
-                pygame.draw.circle(s, mix_rgb(fill, th.bg_bottom, 0.6), c, r)
-                pygame.draw.circle(s, edge, c, r, wdt)
+                pygame.draw.ellipse(s, mix_rgb(fill, th.bg_bottom, 0.6), rect_full)
+                pygame.draw.ellipse(s, edge, rect_full, wdt)
             elif style == "gradient":
                 steps = max(2, r)
                 for i in range(steps, 0, -1):
                     col = mix_rgb(edge, fill, i / steps)
-                    pygame.draw.circle(s, col, c, max(1, r * i // steps))
+                    inset = int(round((steps - i) * 0.5 * min(w, h) / steps))
+                    rr = rect_full.inflate(-2 * inset, -2 * inset)
+                    if rr.w > 0 and rr.h > 0:
+                        pygame.draw.ellipse(s, col, rr)
             else:
-                pygame.draw.circle(s, fill, c, r)
+                pygame.draw.ellipse(s, fill, rect_full)
                 if style == "double":
-                    pygame.draw.circle(s, edge, c, max(1, r // 2))
-            # Зубцы пилы: короткие лучи по кругу.
+                    inner = rect_full.inflate(-(w // 2), -(h // 2))
+                    if inner.w > 0 and inner.h > 0:
+                        pygame.draw.ellipse(s, edge, inner)
+            # Зубцы пилы: короткие лучи по кругу. Наружу за радиус они НЕ
+            # выходят: пила и так занимает всего 4-5 px, и лишний пиксель зубца
+            # раздувал нарисованную опасность в полтора раза относительно
+            # хитбокса, которым размечена карта.
             teeth = 8
             for k in range(teeth):
                 a = k * (2 * math.pi / teeth)
                 pygame.draw.line(
                     s, edge,
-                    (c[0] + math.cos(a) * r * 0.7, c[1] + math.sin(a) * r * 0.7),
-                    (c[0] + math.cos(a) * (r + 1), c[1] + math.sin(a) * (r + 1)),
+                    (c[0] + math.cos(a) * r * 0.45, c[1] + math.sin(a) * r * 0.45),
+                    (c[0] + math.cos(a) * r, c[1] + math.sin(a) * r),
                     1,
                 )
             return s
@@ -1105,11 +1295,18 @@ class Renderer:
         return s
 
     def _make_pad(self, w: int, h: int) -> pygame.Surface:
-        """Спрайт трамплина: низкая «пружина» — форма отличает его от кольца."""
+        """Спрайт трамплина: широкая низкая «плита» с пружиной.
+
+        Спрайт заливает ВЕСЬ хитбокс. Раньше середина плиты оставалась
+        прозрачной, и сквозь неё просвечивал фон с декорациями: примерно 8%
+        пикселей, размеченных как PAD, на картинке были обычным фоном — то есть
+        сеть учили угадывать класс там, где объекта буквально не видно.
+        """
         th = self._theme
         s = pygame.Surface((w, h), pygame.SRCALPHA)
         fill = th.pad_fill
-        pygame.draw.rect(s, fill, pygame.Rect(0, max(0, h - max(1, h // 2)), w, max(1, h // 2)),
+        base = mix_rgb(fill, th.block_edge, 0.35)
+        pygame.draw.rect(s, base, pygame.Rect(0, 0, w, h),
                          border_radius=max(0, min(2, h // 2)))
         cap = mix_rgb(fill, (255, 255, 255), 0.45)
         pygame.draw.rect(s, cap, pygame.Rect(0, 0, w, max(1, h // 3)))
@@ -1120,15 +1317,20 @@ class Renderer:
         return s
 
     def _make_orb(self, w: int, h: int) -> pygame.Surface:
-        """Спрайт кольца: именно КОЛЬЦО с дыркой — его нельзя путать с пилой."""
+        """Спрайт кольца: именно КОЛЬЦО с дыркой — его нельзя путать с пилой.
+
+        Толщина кольца берётся из `RING_INNER_RATIO` семантики, а не «на глаз»:
+        карта рисует кольцо с дыркой ровно этого радиуса, и любое расхождение
+        превращается в пиксели, размеченные ORB, но показанные как фон.
+        """
         th = self._theme
         s = pygame.Surface((w, h), pygame.SRCALPHA)
+        rect = pygame.Rect(0, 0, w, h)
         r = max(2, min(w, h) // 2)
-        c = (w // 2, h // 2)
-        ring = max(1, r // 2)
-        pygame.draw.circle(s, th.orb_fill, c, r, ring)
+        ring = max(1, r - int(round(r * RING_INNER_RATIO)))
+        pygame.draw.ellipse(s, th.orb_fill, rect, ring)
         halo = mix_rgb(th.orb_fill, (255, 255, 255), 0.5)
-        pygame.draw.circle(s, halo, c, r, 1)
+        pygame.draw.ellipse(s, halo, rect, 1)
         return s
 
     def _make_portal(self, kind: str, w: int, h: int) -> pygame.Surface:
@@ -1194,13 +1396,24 @@ class Renderer:
         rad = min(th.corner_radius, max(0, min(w, h) // 3))
         pygame.draw.rect(s, th.player_fill, rect, border_radius=rad)
         inner = mix_rgb(th.player_fill, th.player_edge, 0.55)
-        m = max(1, min(w, h) // 4)
+        # Метка режима занимает СЕРЕДИНУ коробки, а не почти всю её. Раньше она
+        # отступала от края на min(w,h)//4 (для куба 7x7 это 1 px), и оставшуюся
+        # рамку добивала обводка — цвет игрока не было видно вообще, кубик
+        # выглядел тёмным квадратом любой темы. Игрок — самый важный объект в
+        # кадре, и его палитра обязана читаться.
+        side = max(2, min(w, h) // 2)
+        mx = (w - side) // 2
+        my = (h - side) // 2
         if mode == "ship":
-            pygame.draw.polygon(s, inner, [(m, h - m), (w - m, h // 2), (m, m)])
+            pygame.draw.polygon(s, inner, [(mx, my + side), (mx + side, my + side // 2), (mx, my)])
         elif mode == "wave":
-            pygame.draw.polygon(s, inner, [(w // 2, m), (w - m, h // 2), (w // 2, h - m), (m, h // 2)])
+            pygame.draw.polygon(
+                s, inner,
+                [(mx + side // 2, my), (mx + side, my + side // 2),
+                 (mx + side // 2, my + side), (mx, my + side // 2)],
+            )
         else:
-            pygame.draw.rect(s, inner, pygame.Rect(m, m, max(1, w - 2 * m), max(1, h - 2 * m)))
+            pygame.draw.rect(s, inner, pygame.Rect(mx, my, side, side))
         if th.outline_width > 0:
             pygame.draw.rect(s, th.player_edge, rect,
                              width=min(th.outline_width, max(1, min(w, h) // 3)), border_radius=rad)
@@ -1212,7 +1425,7 @@ class Renderer:
     ) -> None:
         """Игрок, его след и партиклы вокруг него."""
         th = self._theme
-        W, H = self.width, self.height
+        H = self.height
         cam_x, cam_y = cam
         hx, hy = player_half_extent(state.mode)
         c0, c1 = _span_x(state.x - hx, state.x + hx, cam_x)

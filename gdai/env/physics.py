@@ -84,12 +84,16 @@ _ORB_VELOCITY: dict[str, float] = {
     "orb_pink": ORB_PINK_V,
     "orb_red": ORB_RED_V,
 }
-_PORTAL_MODE_TARGET: dict[str, str] = {
+# Таблицы порталов публичны: генератор и среда обязаны уметь ответить, с каким
+# режимом и какой гравитацией игрок доезжает до середины уровня (старт с
+# practice-чекпойнта). Дублировать это соответствие у себя они не имеют права —
+# разъехавшиеся копии означали бы, что чекпойнт восстанавливает не ту физику.
+PORTAL_MODE_TARGET: dict[str, str] = {
     "portal_cube": "cube",
     "portal_ship": "ship",
     "portal_wave": "wave",
 }
-_PORTAL_GRAVITY_TARGET: dict[str, int] = {
+PORTAL_GRAVITY_TARGET: dict[str, int] = {
     "portal_gravity_down": 1,
     "portal_gravity_up": -1,
 }
@@ -135,14 +139,28 @@ def speed_of(state: PlayerState) -> float:
     return SPEED_TILES_PER_SEC[idx]
 
 
-def make_initial_state(level: Level, start_x: float = 0.0) -> PlayerState:
+def make_initial_state(
+    level: Level,
+    start_x: float = 0.0,
+    *,
+    mode: str | None = None,
+    gravity: int | None = None,
+    speed_index: int | None = None,
+) -> PlayerState:
     """Стартовое состояние на уровне: игрок стоит на «полу» своей гравитации.
 
     Зачем в физике, а не в среде: этим же состоянием пользуется проверка
     проходимости уровня в генераторе, которая про среду ничего не знает.
+
+    Зачем необязательные `mode`/`gravity`/`speed_index`: старт с середины уровня
+    (practice-чекпойнт, отладка участка) обязан учитывать порталы, пройденные
+    до этой точки. Поставить игрока «как на старте» посреди секции корабля или
+    за портáлом перевёрнутой гравитации значит уронить его в потолок и
+    засчитать смерть, которой в честной игре не было бы. По умолчанию (None)
+    берутся настройки уровня — обычный старт с нуля.
     """
-    mode = level.start_mode
-    gravity = int(level.start_gravity)
+    mode = level.start_mode if mode is None else str(mode)
+    gravity = int(level.start_gravity if gravity is None else gravity)
     _, half_y = player_half_extent(mode)
     # В гравитационной системе «пол» — это меньшая из границ мира.
     floor_y = GROUND_Y if gravity > 0 else level.ceiling_y
@@ -156,7 +174,9 @@ def make_initial_state(level: Level, start_x: float = 0.0) -> PlayerState:
         vy=0.0,
         mode=mode,
         gravity=gravity,
-        speed_index=int(level.start_speed_index),
+        speed_index=int(
+            level.start_speed_index if speed_index is None else speed_index
+        ),
         on_ground=(mode != "wave"),
         alive=True,
         finished=False,
@@ -269,13 +289,13 @@ def step_physics(
             if not _overlaps(x, y, half_x, half_y, obj, 0.0):
                 continue
             if cls == PORTAL_GRAVITY:
-                target = _PORTAL_GRAVITY_TARGET[obj.type]
+                target = PORTAL_GRAVITY_TARGET[obj.type]
                 if target != gravity:
                     gravity = target
                     on_ground = False
                     events["portal"] = obj.type
             elif cls == PORTAL_MODE:
-                target_mode = _PORTAL_MODE_TARGET[obj.type]
+                target_mode = PORTAL_MODE_TARGET[obj.type]
                 if target_mode != mode:
                     mode = target_mode
                     half_x, half_y = player_half_extent(mode)
@@ -340,6 +360,14 @@ def step_physics(
 
     Y = y * gravity + dY
     VY = VY_next
+
+    # Опора обязана подтверждаться КАЖДЫЙ кадр. Без этого сброса игрок, сошедший
+    # с края блока, навсегда оставался бы «на земле»: он мог бы прыгать в
+    # воздухе, признак `on_ground` врал бы политике, а поиск проходимости считал
+    # бы проходимыми уровни, которые пройти нельзя. Стоящий на поверхности игрок
+    # ничего не теряет — гравитация тут же вдавливает его обратно, и разбор
+    # столкновений (шаги 4 и 5) возвращает флаг на место в этом же кадре.
+    on_ground = False
 
     # --- 4. столкновения с блоками по вертикали -----------------------------
     land_Y: float | None = None
@@ -436,6 +464,8 @@ __all__ = [
     "player_half_extent",
     "speed_of",
     "make_initial_state",
+    "PORTAL_MODE_TARGET",
+    "PORTAL_GRAVITY_TARGET",
     "CONTACT_EPS",
     "STEP_UP_TOLERANCE",
     "WAVE_START_HEIGHT",

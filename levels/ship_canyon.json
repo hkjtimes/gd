@@ -1,0 +1,228 @@
+{
+  "version": 1,
+  "name": "ship_canyon",
+  "length": 110.0,
+  "start_mode": "cube",
+  "start_speed_index": 1,
+  "start_gravity": 1,
+  "ceiling_y": 12.0,
+  "theme_hint": "space",
+  "checkpoints": [
+    25.0,
+    48.5,
+    75.0,
+    100.5
+  ],
+  "objects": [
+    {
+      "type": "spike",
+      "x": 12.0,
+      "y": 0.5
+    },
+    {
+      "type": "portal_ship",
+      "x": 22.0,
+      "y": 1.25
+    },
+    {
+      "type": "portal_ship",
+      "x": 22.0,
+      "y": 3.75
+    },
+    {
+      "type": "block",
+      "x": 30.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 30.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 30.0,
+      "y": 10.5
+    },
+    {
+      "type": "block",
+      "x": 30.0,
+      "y": 9.5
+    },
+    {
+      "type": "block",
+      "x": 30.0,
+      "y": 8.5
+    },
+    {
+      "type": "block",
+      "x": 30.0,
+      "y": 7.5
+    },
+    {
+      "type": "block",
+      "x": 37.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 37.0,
+      "y": 1.5
+    },
+    {
+      "type": "block",
+      "x": 37.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 37.0,
+      "y": 10.5
+    },
+    {
+      "type": "block",
+      "x": 37.0,
+      "y": 9.5
+    },
+    {
+      "type": "block",
+      "x": 44.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 44.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 44.0,
+      "y": 10.5
+    },
+    {
+      "type": "block",
+      "x": 44.0,
+      "y": 9.5
+    },
+    {
+      "type": "block",
+      "x": 44.0,
+      "y": 8.5
+    },
+    {
+      "type": "block",
+      "x": 51.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 51.0,
+      "y": 1.5
+    },
+    {
+      "type": "block",
+      "x": 51.0,
+      "y": 2.5
+    },
+    {
+      "type": "block",
+      "x": 51.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 51.0,
+      "y": 10.5
+    },
+    {
+      "type": "block",
+      "x": 58.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 58.0,
+      "y": 1.5
+    },
+    {
+      "type": "block",
+      "x": 58.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 58.0,
+      "y": 10.5
+    },
+    {
+      "type": "block",
+      "x": 58.0,
+      "y": 9.5
+    },
+    {
+      "type": "block",
+      "x": 58.0,
+      "y": 8.5
+    },
+    {
+      "type": "block",
+      "x": 65.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 65.0,
+      "y": 1.5
+    },
+    {
+      "type": "block",
+      "x": 65.0,
+      "y": 2.5
+    },
+    {
+      "type": "block",
+      "x": 65.0,
+      "y": 3.5
+    },
+    {
+      "type": "block",
+      "x": 65.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 65.0,
+      "y": 10.5
+    },
+    {
+      "type": "portal_cube",
+      "x": 74.0,
+      "y": 1.25
+    },
+    {
+      "type": "portal_cube",
+      "x": 74.0,
+      "y": 3.75
+    },
+    {
+      "type": "spike",
+      "x": 86.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 96.0,
+      "y": 0.5
+    },
+    {
+      "type": "spike",
+      "x": 97.0,
+      "y": 0.5
+    },
+    {
+      "type": "goal",
+      "x": 110.0,
+      "y": 6.0
+    }
+  ]
+}

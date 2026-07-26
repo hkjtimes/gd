@@ -1,0 +1,212 @@
+{
+  "version": 1,
+  "name": "wave_maze",
+  "length": 101.0,
+  "start_mode": "cube",
+  "start_speed_index": 1,
+  "start_gravity": 1,
+  "ceiling_y": 12.0,
+  "theme_hint": "cyberpunk",
+  "checkpoints": [
+    25.0,
+    50.0,
+    75.0
+  ],
+  "objects": [
+    {
+      "type": "spike",
+      "x": 12.0,
+      "y": 0.5
+    },
+    {
+      "type": "portal_wave",
+      "x": 22.0,
+      "y": 1.25
+    },
+    {
+      "type": "portal_wave",
+      "x": 22.0,
+      "y": 3.75
+    },
+    {
+      "type": "block",
+      "x": 32.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 32.0,
+      "y": 1.5
+    },
+    {
+      "type": "block",
+      "x": 32.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 32.0,
+      "y": 10.5
+    },
+    {
+      "type": "block",
+      "x": 32.0,
+      "y": 9.5
+    },
+    {
+      "type": "block",
+      "x": 32.0,
+      "y": 8.5
+    },
+    {
+      "type": "block",
+      "x": 39.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 39.0,
+      "y": 1.5
+    },
+    {
+      "type": "block",
+      "x": 39.0,
+      "y": 2.5
+    },
+    {
+      "type": "block",
+      "x": 39.0,
+      "y": 3.5
+    },
+    {
+      "type": "block",
+      "x": 39.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 39.0,
+      "y": 10.5
+    },
+    {
+      "type": "block",
+      "x": 39.0,
+      "y": 9.5
+    },
+    {
+      "type": "block",
+      "x": 46.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 46.0,
+      "y": 1.5
+    },
+    {
+      "type": "block",
+      "x": 46.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 46.0,
+      "y": 10.5
+    },
+    {
+      "type": "block",
+      "x": 46.0,
+      "y": 9.5
+    },
+    {
+      "type": "block",
+      "x": 46.0,
+      "y": 8.5
+    },
+    {
+      "type": "block",
+      "x": 53.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 53.0,
+      "y": 1.5
+    },
+    {
+      "type": "block",
+      "x": 53.0,
+      "y": 2.5
+    },
+    {
+      "type": "block",
+      "x": 53.0,
+      "y": 3.5
+    },
+    {
+      "type": "block",
+      "x": 53.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 53.0,
+      "y": 10.5
+    },
+    {
+      "type": "block",
+      "x": 60.0,
+      "y": 0.5
+    },
+    {
+      "type": "block",
+      "x": 60.0,
+      "y": 1.5
+    },
+    {
+      "type": "block",
+      "x": 60.0,
+      "y": 2.5
+    },
+    {
+      "type": "block",
+      "x": 60.0,
+      "y": 11.5
+    },
+    {
+      "type": "block",
+      "x": 60.0,
+      "y": 10.5
+    },
+    {
+      "type": "block",
+      "x": 60.0,
+      "y": 9.5
+    },
+    {
+      "type": "block",
+      "x": 60.0,
+      "y": 8.5
+    },
+    {
+      "type": "portal_cube",
+      "x": 69.0,
+      "y": 1.25
+    },
+    {
+      "type": "portal_cube",
+      "x": 69.0,
+      "y": 3.75
+    },
+    {
+      "type": "spike",
+      "x": 81.0,
+      "y": 0.5
+    },
+    {
+      "type": "goal",
+      "x": 101.0,
+      "y": 6.0
+    }
+  ]
+}

@@ -48,12 +48,20 @@ from gdai.constants import (
     PAD_RED_V,
     PAD_YELLOW_V,
     PLAYER_HALF,
+    PORTAL_GRAVITY,
+    PORTAL_MODE,
+    PORTAL_SPEED,
     SHIP_THRUST,
     SOLID,
     SPEED_TILES_PER_SEC,
 )
 from gdai.env.level import Level, LevelObject
-from gdai.env.physics import PlayerState, make_initial_state
+from gdai.env.physics import (
+    PORTAL_GRAVITY_TARGET,
+    PORTAL_MODE_TARGET,
+    PlayerState,
+    make_initial_state,
+)
 from gdai.env.solver import (
     SearchResult,
     is_solvable,
@@ -88,6 +96,19 @@ LEVEL_ATTEMPTS: int = 3          # столько раз пересобирае�
 _BUILD_MAX_FRONTIER: int = 64
 _BUILD_MAX_NODES: int = 60_000   # на один участок
 _FINAL_MAX_NODES: int = 400_000  # на финальную проверку целого уровня
+
+# --- проверка чекпойнтов ----------------------------------------------------
+# Насколько далеко вперёд смотрит проверка «с этой точки можно стартовать».
+# 18 тайлов — это два-три препятствия на базовой скорости: достаточно, чтобы
+# поймать «возродился в двух тайлах от стены», и дёшево, потому что проверка
+# запускается на каждого кандидата.
+CHECKPOINT_LOOKAHEAD: float = 18.0
+_CHECKPOINT_MAX_FRAMES: int = 400
+_CHECKPOINT_MAX_NODES: int = 20_000
+_CHECKPOINT_MAX_FRONTIER: int = 48
+# Радиус, в котором чекпойнт смотрит на соседей, и минимальный отступ от портала.
+_CLEAR_RADIUS: float = 5.0
+_PORTAL_CLEARANCE: float = 3.0
 
 # Зеркало типов при перевёрнутой гравитации: хитбокс симметричен, но
 # «смотреть» шип обязан в сторону игрока, иначе картинка врёт разметке.
@@ -935,13 +956,52 @@ def generate_level(
     return _flat_level(name, target)
 
 
+def context_at(level: Level, x: float) -> tuple[str, int, int]:
+    """Режим, гравитация и индекс скорости, с которыми игрок доезжает до `x`.
+
+    Зачем: старт с середины уровня (practice-чекпойнт, отладка участка) обязан
+    учитывать порталы, оставшиеся позади. Игрок, возрождённый «как на старте»
+    за портáлом волны или перевёрнутой гравитации, умирает в первые же кадры не
+    из-за ошибки, а из-за того, что среда поставила его не в ту физику.
+
+    Считается по построению уровня, а не симуляцией: порталы генератора стоят
+    стопкой во всю высоту прохода, миновать их нельзя. Для уровней, нарисованных
+    вручную, где портал можно перепрыгнуть, ответ — «самый вероятный», и это
+    честнее, чем всегда возвращать стартовые настройки.
+    """
+    mode = str(level.start_mode)
+    gravity = int(level.start_gravity)
+    speed_index = int(level.start_speed_index)
+    for obj in sorted(level.objects, key=lambda o: o.x):
+        if obj.x >= x:
+            break
+        obj_type = obj.type
+        if obj_type in PORTAL_MODE_TARGET:
+            mode = PORTAL_MODE_TARGET[obj_type]
+        elif obj_type in PORTAL_GRAVITY_TARGET:
+            gravity = PORTAL_GRAVITY_TARGET[obj_type]
+        elif obj_type.startswith("portal_speed_"):
+            speed_index = int(obj_type.rsplit("_", 1)[1])
+    return mode, gravity, speed_index
+
+
+def state_at(level: Level, x: float) -> PlayerState:
+    """Состояние игрока для старта с точки `x` (с учётом пройденных порталов)."""
+    mode, gravity, speed_index = context_at(level, x)
+    return make_initial_state(
+        level, x, mode=mode, gravity=gravity, speed_index=speed_index
+    )
+
+
 def make_checkpoints(level: Level, every: float = 25.0) -> list[float]:
     """x-координаты practice-чекпойнтов примерно через каждые `every` тайлов.
 
-    Зачем не просто арифметическая прогрессия: чекпойнт посреди поля шипов или
-    внутри блока бесполезен — с него нельзя стартовать. Поэтому кандидат
-    сдвигается к ближайшему «чистому» месту, где рядом нет ни опасности, ни
-    блока, и игрок может спокойно стоять на полу.
+    Зачем не просто арифметическая прогрессия: чекпойнт посреди поля шипов,
+    внутри блока или в двух тайлах перед стеной бесполезен — с него нельзя
+    стартовать. Поэтому кандидат сдвигается к ближайшему «чистому» месту, а
+    потом ПРОВЕРЯЕТСЯ поиском: из этой точки игрок обязан суметь прожить
+    ближайшие `CHECKPOINT_LOOKAHEAD` тайлов. Геометрической проверки мало —
+    участок может требовать разбега длиннее, чем расстояние до первой стены.
     """
     result: list[float] = []
     if every <= 0.0:
@@ -962,36 +1022,79 @@ def _safe_checkpoint_x(level: Level, x: float, limit: float) -> float | None:
         for candidate in ((x - offset), (x + offset)) if offset else (x,):
             if candidate < 5.0 or candidate > limit:
                 continue
-            if _is_clear(level, float(candidate)):
+            if _is_clear(level, float(candidate)) and _is_viable(level, float(candidate)):
                 return float(candidate)
     return None
 
 
 def _is_clear(level: Level, x: float) -> bool:
-    """Нет ли рядом с `x` опасностей и блоков, мешающих старту с чекпойнта.
+    """Нет ли рядом с `x` опасностей, блоков и порталов, мешающих старту.
 
     Расстояние считается до КРАЯ объекта, а не до его центра: широкий блок,
     центр которого «достаточно далеко», всё равно может стоять стеной прямо
-    перед возрождённым игроком.
+    перед возрождённым игроком. Порталы тоже нежелательные соседи: возрождение
+    внутри портала делает состояние игрока двусмысленным (портал сработает ещё
+    раз или не сработает вовсе — в зависимости от высоты).
     """
-    for obj in level.objects_in_range(x - 4.0, x + 4.0):
+    for obj in level.objects_in_range(x - _CLEAR_RADIUS, x + _CLEAR_RADIUS):
         cls = obj.semantic_class()
-        if cls not in (HAZARD, SOLID):
-            continue
         distance = abs(obj.x - x) - obj.half_extent()[0]
-        if distance < (3.0 if cls == HAZARD else 2.0):
-            return False
+        if cls in (HAZARD, SOLID):
+            if distance < (3.0 if cls == HAZARD else 2.0):
+                return False
+        elif cls in (PORTAL_GRAVITY, PORTAL_MODE, PORTAL_SPEED):
+            if distance < _PORTAL_CLEARANCE:
+                return False
     return True
+
+
+def _is_viable(level: Level, x: float) -> bool:
+    """Можно ли из точки `x` не только выжить, но и доиграть уровень до конца.
+
+    Зачем поиск, а не ещё одна геометрическая эвристика: «до стены два тайла»
+    ничего не говорит о том, хватает ли разбега на прыжок через неё, а мимо
+    разгонного портала скорости геометрия вообще слепа.
+
+    Проверка двухступенчатая ради скорости: сначала дешёвый взгляд на
+    `CHECKPOINT_LOOKAHEAD` тайлов вперёд (он отсеивает почти всех плохих
+    кандидатов за миллисекунды), и только выжившие проверяются до финиша.
+    Финиш обязателен: чекпойнт, с которого уровень доиграть нельзя, вреднее
+    отсутствия чекпойнта — агент бесконечно тренируется на заведомо
+    непроходимом куске и никогда не получает награду за прохождение.
+    """
+    start = state_at(level, x)
+    near = search_forward(
+        level,
+        [start],
+        min(x + CHECKPOINT_LOOKAHEAD, float(level.length)),
+        max_frames=_CHECKPOINT_MAX_FRAMES,
+        max_nodes=_CHECKPOINT_MAX_NODES,
+        max_frontier=_CHECKPOINT_MAX_FRONTIER,
+    )
+    if near.finished:
+        return True
+    if not near.reached:
+        return False
+    return search_forward(
+        level,
+        near.reached,
+        None,
+        max_nodes=_CHECKPOINT_MAX_NODES * 10,
+        max_frontier=_CHECKPOINT_MAX_FRONTIER,
+    ).finished
 
 
 __all__ = [
     "CEILING_Y",
+    "CHECKPOINT_LOOKAHEAD",
     "PatternContext",
     "PatternSpec",
     "PATTERNS",
     "PATTERN_SPECS",
     "generate_level",
     "make_checkpoints",
+    "context_at",
+    "state_at",
     "is_solvable",
     "solve_actions",
     "search_forward",
