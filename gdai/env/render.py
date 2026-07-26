@@ -460,7 +460,7 @@ class Renderer:
         arr = np.repeat(col[:, None, :], W, axis=1)   # (ph, W, 3)
 
         if th.bg_style == "noise":
-            amp = 12.0 + 40.0 * th.pattern_scale
+            amp = 8.0 + 22.0 * th.pattern_scale
             arr += rng.normal(0.0, amp, size=(ph, W, 1)).astype(np.float32)
 
         np.clip(arr, 0.0, 255.0, out=arr)
@@ -703,7 +703,7 @@ class Renderer:
         base_x = cell * _DECO_CELL
         # Один вызов на всю ячейку вместо шестидесяти скалярных: генерация
         # декора идёт при каждой смене темы, и скалярный rng заметен в профиле.
-        vals = rng.random((_DECO_MAX_PER_CELL, 6)).tolist()
+        vals = rng.random((_DECO_MAX_PER_CELL, 9)).tolist()
         items: list[tuple[Any, ...]] = []
         for row in vals:
             items.append((
@@ -713,9 +713,9 @@ class Renderer:
                 -0.5 + row[3] * 11.0,                   # 3 мировой y
                 0.25 + row[4] * 2.35,                   # 4 ширина в тайлах
                 0.25 + row[5] * 2.95,                   # 5 высота в тайлах
-                int(row[2] * 97) & 7,                   # 6 индекс цвета
-                40 + int(row[4] * 150),                 # 7 альфа
-                row[5],                                 # 8 свободный параметр
+                int(row[6] * 8) & 7,                    # 6 индекс цвета
+                40 + int(row[7] * 150),                 # 7 альфа
+                row[8],                                 # 8 свободный параметр
             ))
         result = tuple(items)
         self._deco_cache[cell] = result
@@ -1250,11 +1250,14 @@ class Renderer:
         th = self._theme
         if th.trail <= 0.0:
             return
-        steps = int(2 + 6 * th.trail * self.decoration_level)
+        steps = int(2 + 5 * th.trail * self.decoration_level)
         color = th.player_fill
         for k in range(1, steps + 1):
             frac = k / (steps + 1)
-            alpha = int(150 * th.trail * (1.0 - frac))
+            # Потолок альфы намеренно невысокий: след обязан читаться как след,
+            # а не как продолжение игрока — иначе разметка «коробка игрока»
+            # перестанет соответствовать тому, что видно на картинке.
+            alpha = int(105 * th.trail * (1.0 - frac))
             if alpha <= 3:
                 continue
             dx = int(k * max(2, w // 2))
@@ -1325,7 +1328,10 @@ class Renderer:
         if strength > 0.02:
             bright = f - _BLOOM_THRESHOLD
             np.maximum(bright, 0.0, out=bright)
-            f += _bloom_blur(bright) * (1.4 * strength)
+            add = _bloom_blur(bright)
+            add *= 1.1 * strength
+            np.minimum(add, _BLOOM_CAP, out=add)
+            f += add
 
         # Хроматическая аберрация: каналы R и B расходятся на пиксель.
         if th.chromatic > 0.02 and deco > 0.0:
